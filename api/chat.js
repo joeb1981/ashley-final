@@ -1,5 +1,5 @@
 
-const OpenAI = require("openai");
+import OpenAI from "openai";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -13,52 +13,55 @@ const assistantIDs = {
 
 let scottThreadId = null;
 let routedThreads = {};
-let routedAlready = false;
+let currentAssistant = "ashley";
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).send("Method Not Allowed");
   }
 
   try {
-    const { message } = req.body;
+    const { message, fileContent } = req.body;
 
     if (!scottThreadId) {
       const thread = await openai.beta.threads.create();
       scottThreadId = thread.id;
-      routedAlready = false;
+      currentAssistant = "ashley";
     }
 
-    await openai.beta.threads.messages.create(scottThreadId, {
-      role: "user",
-      content: message,
-    });
+    let finalMessage = message;
+    if (fileContent) {
+      finalMessage += `\n\n[User uploaded file contents:]\n${fileContent}`;
+    }
 
-    const run = await openai.beta.threads.runs.create(scottThreadId, {
-      assistant_id: assistantIDs.ashley,
-    });
+    if (currentAssistant === "ashley") {
+      await openai.beta.threads.messages.create(scottThreadId, {
+        role: "user",
+        content: finalMessage,
+      });
 
-    let runStatus;
-    do {
-      await new Promise((res) => setTimeout(res, 1500));
-      runStatus = await openai.beta.threads.runs.retrieve(scottThreadId, run.id);
-    } while (runStatus.status !== "completed");
+      const run = await openai.beta.threads.runs.create(scottThreadId, {
+        assistant_id: assistantIDs.ashley,
+      });
 
-    const messages = await openai.beta.threads.messages.list(scottThreadId);
-    const ashleyMessage = messages.data[0].content[0].text.value;
+      let runStatus;
+      do {
+        await new Promise((res) => setTimeout(res, 1500));
+        runStatus = await openai.beta.threads.runs.retrieve(scottThreadId, run.id);
+      } while (runStatus.status !== "completed");
 
-    let finalReply = ashleyMessage;
+      const messages = await openai.beta.threads.messages.list(scottThreadId);
+      const ashleyMessage = messages.data[0].content[0].text.value;
 
-    if (!routedAlready) {
       let routedAssistant = null;
       if (/video|script|reels|tiktok/i.test(message)) {
-        routedAssistant = assistantIDs["Viral S.F. Video Scripts"];
+        routedAssistant = "Viral S.F. Video Scripts";
       } else if (/food|calories|meal|macros|nutrition|fat loss/i.test(message)) {
-        routedAssistant = assistantIDs["Your Personal Meal Planner"];
+        routedAssistant = "Your Personal Meal Planner";
       }
 
       if (routedAssistant) {
-        routedAlready = true;
+        currentAssistant = routedAssistant;
 
         if (!routedThreads[routedAssistant]) {
           const newThread = await openai.beta.threads.create();
@@ -67,11 +70,11 @@ module.exports = async (req, res) => {
 
         await openai.beta.threads.messages.create(routedThreads[routedAssistant], {
           role: "user",
-          content: message,
+          content: finalMessage,
         });
 
         const routedRun = await openai.beta.threads.runs.create(routedThreads[routedAssistant], {
-          assistant_id: routedAssistant,
+          assistant_id: assistantIDs[routedAssistant],
         });
 
         let routedStatus;
@@ -83,14 +86,41 @@ module.exports = async (req, res) => {
         const routedMessages = await openai.beta.threads.messages.list(routedThreads[routedAssistant]);
         const routedReply = routedMessages.data[0].content[0].text.value;
 
-        finalReply = `${ashleyMessage}
-
-➡️ ${routedReply}`;
+        return res.status(200).json({
+          response: `${ashleyMessage}\n\n➡️ ${routedReply}`,
+          assistant: routedAssistant,
+          threadId: routedThreads[routedAssistant]
+        });
       }
+
+      return res.status(200).json({ response: ashleyMessage, assistant: "Ashley", threadId: scottThreadId });
+
+    } else {
+      const assistant = currentAssistant;
+      const threadId = routedThreads[assistant];
+
+      await openai.beta.threads.messages.create(threadId, {
+        role: "user",
+        content: finalMessage,
+      });
+
+      const run = await openai.beta.threads.runs.create(threadId, {
+        assistant_id: assistantIDs[assistant],
+      });
+
+      let status;
+      do {
+        await new Promise((res) => setTimeout(res, 1500));
+        status = await openai.beta.threads.runs.retrieve(threadId, run.id);
+      } while (status.status !== "completed");
+
+      const messages = await openai.beta.threads.messages.list(threadId);
+      const reply = messages.data[0].content[0].text.value;
+
+      return res.status(200).json({ response: reply, assistant, threadId });
     }
 
-    res.status(200).json({ response: finalReply });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: error.message });
   }
-};
+}
