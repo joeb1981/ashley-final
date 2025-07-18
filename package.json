@@ -1,0 +1,9 @@
+
+{
+  "name": "ashley-router",
+  "version": "2.0.0",
+  "type": "module",
+  "dependencies": {
+    "openai": "^4.27.0"
+  }
+}
