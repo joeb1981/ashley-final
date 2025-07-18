@@ -11,7 +11,6 @@
       color: white;
       font-family: Arial, sans-serif;
       margin: 0;
-      padding: 0;
       display: flex;
       flex-direction: column;
       height: 100vh;
@@ -81,6 +80,7 @@
     <input type="text" id="input" placeholder="Talk to Ashley..." />
     <input type="file" id="fileUpload" />
     <button type="submit">Send</button>
+    <button type="button" id="micBtn">🎤</button>
   </form>
 
   <script>
@@ -92,6 +92,7 @@
     const input = document.getElementById("input");
     const fileInput = document.getElementById("fileUpload");
     const resetBtn = document.getElementById("resetBtn");
+    const micBtn = document.getElementById("micBtn");
     const form = document.getElementById("inputArea");
 
     function addMessage(text, sender, isUser = false) {
@@ -108,23 +109,14 @@
       localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
     }
 
-    function showTyping() {
+    async function sendMessage(text) {
       const typing = document.createElement("div");
       typing.id = "typing";
       typing.className = "typing";
       typing.innerText = "Ashley is thinking...";
       chat.appendChild(typing);
-    }
 
-    function hideTyping() {
-      const typing = document.getElementById("typing");
-      if (typing) typing.remove();
-    }
-
-    async function sendMessage(text) {
-      showTyping();
       let fileContent = null;
-
       if (fileInput.files.length > 0) {
         const file = fileInput.files[0];
         fileContent = await file.text();
@@ -136,7 +128,8 @@
         body: JSON.stringify({ message: text, threadId, assistant, fileContent })
       });
       const data = await res.json();
-      hideTyping();
+      typing.remove();
+
       if (data.response) {
         threadId = data.threadId;
         assistant = data.assistant;
@@ -162,6 +155,29 @@
       chatHistory = [];
       localStorage.removeItem("chatHistory");
     });
+
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = "en-US";
+
+      micBtn.addEventListener("click", () => {
+        recognition.start();
+      });
+
+      recognition.onresult = (event) => {
+        input.value = event.results[0][0].transcript;
+      };
+
+      recognition.onerror = (event) => {
+        console.error("Speech recognition error:", event.error);
+      };
+    } else {
+      micBtn.disabled = true;
+      micBtn.innerText = "🎤 (Unsupported)";
+    }
 
     window.addEventListener("load", () => {
       const saved = localStorage.getItem("chatHistory");
