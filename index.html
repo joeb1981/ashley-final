@@ -1,1 +1,175 @@
-PLACEHOLDER: Run full HTML generator if needed
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Ashley – The Routing Boss</title>
+  <style>
+    body {
+      background-color: #1e1e1e;
+      color: white;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    #chat {
+      flex-grow: 1;
+      padding: 1rem;
+      overflow-y: auto;
+    }
+    .message {
+      margin: 0.5rem 0;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      max-width: 70%;
+    }
+    .scott {
+      align-self: flex-end;
+      background-color: #1e3a8a;
+      text-align: right;
+    }
+    .bot {
+      align-self: flex-start;
+      background-color: #333;
+    }
+    .label {
+      font-size: 0.75rem;
+      opacity: 0.7;
+      margin-bottom: 0.25rem;
+    }
+    #inputArea {
+      display: flex;
+      padding: 0.75rem;
+      background-color: #111;
+    }
+    input[type="text"] {
+      flex: 1;
+      padding: 0.75rem;
+      font-size: 1rem;
+      margin-right: 0.5rem;
+    }
+    button {
+      padding: 0.75rem 1rem;
+      background: #2563eb;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    #resetBtn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background-color: #444;
+    }
+    #fileUpload {
+      margin-left: 0.5rem;
+    }
+    .typing {
+      font-style: italic;
+      opacity: 0.7;
+    }
+  </style>
+</head>
+<body>
+  <button id="resetBtn">Reset Chat</button>
+  <div id="chat"></div>
+  <form id="inputArea">
+    <input type="text" id="input" placeholder="Talk to Ashley..." />
+    <input type="file" id="fileUpload" />
+    <button type="submit">Send</button>
+  </form>
+
+  <script>
+    let threadId = null;
+    let assistant = null;
+    let chatHistory = [];
+
+    const chat = document.getElementById("chat");
+    const input = document.getElementById("input");
+    const fileInput = document.getElementById("fileUpload");
+    const resetBtn = document.getElementById("resetBtn");
+    const form = document.getElementById("inputArea");
+
+    function addMessage(text, sender, isUser = false) {
+      const msg = document.createElement("div");
+      msg.className = "message " + (isUser ? "scott" : "bot");
+      const label = document.createElement("div");
+      label.className = "label";
+      label.innerText = sender;
+      msg.appendChild(label);
+      msg.appendChild(document.createTextNode(text));
+      chat.appendChild(msg);
+      chat.scrollTop = chat.scrollHeight;
+      chatHistory.push({ sender, text });
+      localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
+    }
+
+    function showTyping() {
+      const typing = document.createElement("div");
+      typing.id = "typing";
+      typing.className = "typing";
+      typing.innerText = "Ashley is thinking...";
+      chat.appendChild(typing);
+    }
+
+    function hideTyping() {
+      const typing = document.getElementById("typing");
+      if (typing) typing.remove();
+    }
+
+    async function sendMessage(text) {
+      showTyping();
+      let fileContent = null;
+
+      if (fileInput.files.length > 0) {
+        const file = fileInput.files[0];
+        fileContent = await file.text();
+      }
+
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text, threadId, assistant, fileContent })
+      });
+      const data = await res.json();
+      hideTyping();
+      if (data.response) {
+        threadId = data.threadId;
+        assistant = data.assistant;
+        addMessage(data.response, assistant || "Ashley");
+      } else {
+        addMessage("Something went wrong.", "System");
+      }
+    }
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      addMessage(text, "Scott", true);
+      input.value = "";
+      sendMessage(text);
+    });
+
+    resetBtn.addEventListener("click", () => {
+      threadId = null;
+      assistant = null;
+      chat.innerHTML = "";
+      chatHistory = [];
+      localStorage.removeItem("chatHistory");
+    });
+
+    window.addEventListener("load", () => {
+      const saved = localStorage.getItem("chatHistory");
+      if (saved) {
+        chatHistory = JSON.parse(saved);
+        chatHistory.forEach(m => addMessage(m.text, m.sender, m.sender === "Scott"));
+      }
+    });
+  </script>
+</body>
+</html>
