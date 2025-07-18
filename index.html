@@ -7,7 +7,7 @@
   <title>Ashley – The Routing Boss</title>
   <style>
     body {
-      background-color: #1e1e1e;
+      background-color: #121212;
       color: white;
       font-family: Arial, sans-serif;
       margin: 0;
@@ -19,44 +19,51 @@
       flex-grow: 1;
       padding: 1rem;
       overflow-y: auto;
+      display: flex;
+      flex-direction: column;
     }
     .message {
-      margin: 0.5rem 0;
+      margin: 0.5rem;
       padding: 0.75rem 1rem;
-      border-radius: 8px;
-      max-width: 70%;
+      border-radius: 12px;
+      max-width: 75%;
+      white-space: pre-wrap;
     }
     .scott {
-      align-self: flex-end;
       background-color: #1e3a8a;
+      align-self: flex-end;
       text-align: right;
     }
     .bot {
+      background-color: #2e2e2e;
       align-self: flex-start;
-      background-color: #333;
     }
     .label {
-      font-size: 0.75rem;
-      opacity: 0.7;
-      margin-bottom: 0.25rem;
+      font-size: 0.7rem;
+      opacity: 0.6;
+      margin-bottom: 2px;
     }
     #inputArea {
       display: flex;
       padding: 0.75rem;
-      background-color: #111;
+      background-color: #1a1a1a;
     }
     input[type="text"] {
       flex: 1;
       padding: 0.75rem;
       font-size: 1rem;
+      border: none;
+      outline: none;
       margin-right: 0.5rem;
     }
     button {
-      padding: 0.75rem 1rem;
-      background: #2563eb;
+      padding: 0.75rem;
+      font-size: 1rem;
+      background-color: #2563eb;
       color: white;
       border: none;
       cursor: pointer;
+      margin-left: 0.25rem;
     }
     #resetBtn {
       position: absolute;
@@ -67,54 +74,52 @@
     #fileUpload {
       margin-left: 0.5rem;
     }
-    .typing {
-      font-style: italic;
-      opacity: 0.7;
-    }
   </style>
 </head>
 <body>
   <button id="resetBtn">Reset Chat</button>
   <div id="chat"></div>
   <form id="inputArea">
-    <input type="text" id="input" placeholder="Talk to Ashley..." />
+    <input type="text" id="input" placeholder="Talk to Ashley..." autocomplete="off"/>
     <input type="file" id="fileUpload" />
-    <button type="submit">Send</button>
     <button type="button" id="micBtn">🎤</button>
+    <button type="submit">Send</button>
   </form>
 
   <script>
     let threadId = null;
     let assistant = null;
-    let chatHistory = [];
-
     const chat = document.getElementById("chat");
     const input = document.getElementById("input");
     const fileInput = document.getElementById("fileUpload");
+    const form = document.getElementById("inputArea");
     const resetBtn = document.getElementById("resetBtn");
     const micBtn = document.getElementById("micBtn");
-    const form = document.getElementById("inputArea");
 
     function addMessage(text, sender, isUser = false) {
       const msg = document.createElement("div");
       msg.className = "message " + (isUser ? "scott" : "bot");
+
       const label = document.createElement("div");
       label.className = "label";
       label.innerText = sender;
       msg.appendChild(label);
-      msg.appendChild(document.createTextNode(text));
+
+      const content = document.createElement("div");
+      content.innerText = text;
+      msg.appendChild(content);
+
       chat.appendChild(msg);
       chat.scrollTop = chat.scrollHeight;
-      chatHistory.push({ sender, text });
-      localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
     }
 
-    async function sendMessage(text) {
-      const typing = document.createElement("div");
-      typing.id = "typing";
-      typing.className = "typing";
-      typing.innerText = "Ashley is thinking...";
-      chat.appendChild(typing);
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+
+      addMessage(text, "Scott", true);
+      input.value = "";
 
       let fileContent = null;
       if (fileInput.files.length > 0) {
@@ -127,33 +132,21 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text, threadId, assistant, fileContent })
       });
-      const data = await res.json();
-      typing.remove();
 
+      const data = await res.json();
       if (data.response) {
         threadId = data.threadId;
-        assistant = data.assistant;
-        addMessage(data.response, assistant || "Ashley");
+        assistant = data.assistant || "Ashley";
+        addMessage(data.response, assistant);
       } else {
         addMessage("Something went wrong.", "System");
       }
-    }
-
-    form.addEventListener("submit", (e) => {
-      e.preventDefault();
-      const text = input.value.trim();
-      if (!text) return;
-      addMessage(text, "Scott", true);
-      input.value = "";
-      sendMessage(text);
     });
 
     resetBtn.addEventListener("click", () => {
       threadId = null;
       assistant = null;
       chat.innerHTML = "";
-      chatHistory = [];
-      localStorage.removeItem("chatHistory");
     });
 
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
@@ -178,14 +171,6 @@
       micBtn.disabled = true;
       micBtn.innerText = "🎤 (Unsupported)";
     }
-
-    window.addEventListener("load", () => {
-      const saved = localStorage.getItem("chatHistory");
-      if (saved) {
-        chatHistory = JSON.parse(saved);
-        chatHistory.forEach(m => addMessage(m.text, m.sender, m.sender === "Scott"));
-      }
-    });
   </script>
 </body>
 </html>
